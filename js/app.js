@@ -4,6 +4,16 @@
   const state = {
     page: "dashboard",
     search: "",
+    authenticated: localStorage.getItem("motocare_staff_session") === "1",
+    authView: "login",
+    showProfileMenu: false,
+    notificationsOpen: false,
+    account: JSON.parse(localStorage.getItem("motocare_staff_account") || '{"name":"Francis","email":"admin@motocare.ai","role":"Administrator"}'),
+    notifications: [
+      {id:1,title:"Low stock alert",text:"Oil Filter — Honda is below reorder level.",time:"10 min ago",read:false},
+      {id:2,title:"Pending appointment",text:"Miguel Santos has a pending 10:30 AM appointment.",time:"25 min ago",read:false},
+      {id:3,title:"Repair completed",text:"REP-2003 was marked as completed.",time:"1 hr ago",read:true}
+    ],
     customerFilter: "All",
     statusFilter: "All",
     inventoryFilter: "All",
@@ -94,40 +104,39 @@
   };
 
   function shell(content){
-    app.innerHTML = `
+    if(!state.authenticated){
+      app.innerHTML=authMarkup(); bindAuth(); return;
+    }
+    const unread=state.notifications.filter(n=>!n.read).length;
+    app.innerHTML=`
       <div class="app">
         <aside class="sidebar" id="sidebar">
-          <div class="brand">
-            <div class="brand-mark">M</div>
-            <div><strong>MotoCare AI</strong><small>Shop Management System</small></div>
-          </div>
-          <nav class="nav">
-            <div class="nav-label">Main Menu</div>
-            ${nav.map(([id,icon,label])=>`<button type="button" class="${state.page===id?'active':''}" data-nav="${id}"><span class="nav-icon">${icon}</span>${label}</button>`).join("")}
-          </nav>
+          <div class="brand"><div class="brand-mark">M</div><div><strong>MotoCare AI</strong><small>Shop Management System</small></div></div>
+          <nav class="nav"><div class="nav-label">Main Menu</div>${nav.map(([id,icon,label])=>`<button type="button" class="${state.page===id?'active':''}" data-nav="${id}"><span class="nav-icon">${icon}</span>${label}</button>`).join("")}</nav>
           <div class="sidebar-foot">Prototype Interface<br>Owner / Staff Portal</div>
         </aside>
         <main class="main">
           <header class="topbar">
+            <div class="top-actions"><button class="icon-btn mobile-menu" type="button" data-action="menu">☰</button><div class="breadcrumb">MotoCare AI / <strong>${pageTitle()}</strong></div></div>
             <div class="top-actions">
-              <button class="icon-btn mobile-menu" type="button" data-action="menu">☰</button>
-              <div class="breadcrumb">MotoCare AI / <strong>${pageTitle()}</strong></div>
-            </div>
-            <div class="top-actions">
-              <button class="icon-btn hide-mobile" type="button" data-action="notification" title="Notifications">♢</button>
-              <div class="profile"><div class="avatar">FW</div><div class="hide-mobile"><strong style="font-size:12px">Francis</strong><div class="small-text muted">Administrator</div></div></div>
+              <div class="notification-wrap"><button class="icon-btn" type="button" data-action="notification" title="Notifications">♢${unread?`<span class="notification-dot">${unread>9?"9+":unread}</span>`:""}</button>${state.notificationsOpen?notificationPanel():""}</div>
+              <div class="profile-wrap"><button class="profile profile-button" type="button" data-action="profile-menu"><div class="avatar">${esc(initials(state.account.name))}</div><div class="hide-mobile"><strong style="font-size:12px">${esc(state.account.name)}</strong><div class="small-text muted">${esc(state.account.role)}</div></div><span class="profile-chevron">⌄</span></button>${state.showProfileMenu?profileMenu():""}</div>
             </div>
           </header>
           <section class="content">${content}</section>
         </main>
       </div>
-      <div class="modal-backdrop ${state.modal?'open':''}" id="modalBackdrop">
-        ${state.modal ? modalMarkup() : ""}
-      </div>
-      <div class="toast" id="toast" aria-live="polite"></div>
-    `;
+      <div class="modal-backdrop ${state.modal?'open':''}" id="modalBackdrop">${state.modal?modalMarkup():""}</div>
+      <div class="toast" id="toast" aria-live="polite"></div>`;
     bind();
   }
+  function authMarkup(){
+    if(state.authView==="signup") return `<div class="auth-shell"><div class="auth-brand"><div class="brand-mark">M</div><div><strong>MotoCare AI</strong><small>Shop Management System</small></div></div><div class="auth-card"><div class="auth-head"><h1>Create Staff Account</h1><p>Set up an account for the MotoCare AI staff portal.</p></div><form data-auth-form="signup"><div class="form-grid">${field("Full Name","name","","text",true)}${field("Email","email","","email",true)}${field("Password","password","","password",true)}${field("Confirm Password","confirm","","password",true)}</div><div class="auth-note">Prototype only: accounts are stored locally in this browser.</div><button class="btn primary auth-submit">Create Account</button></form><div class="auth-switch">Already have an account? <button type="button" class="link-btn" data-auth-view="login">Sign in</button></div></div><div class="auth-footer">MotoCare AI · Owner / Staff Portal · Prototype</div><div class="toast" id="toast"></div></div>`;
+    if(state.authView==="forgot") return `<div class="auth-shell"><div class="auth-brand"><div class="brand-mark">M</div><div><strong>MotoCare AI</strong><small>Shop Management System</small></div></div><div class="auth-card"><div class="auth-head"><h1>Reset Password</h1><p>Enter your staff email and we'll simulate a password reset request.</p></div><form data-auth-form="forgot">${field("Staff Email","email",state.account.email||"","email",true)}<button class="btn primary auth-submit">Send Reset Link</button></form><div class="auth-switch"><button type="button" class="link-btn" data-auth-view="login">← Back to sign in</button></div></div><div class="auth-footer">MotoCare AI · Owner / Staff Portal · Prototype</div><div class="toast" id="toast"></div></div>`;
+    return `<div class="auth-shell"><div class="auth-brand"><div class="brand-mark">M</div><div><strong>MotoCare AI</strong><small>Shop Management System</small></div></div><div class="auth-card"><div class="auth-head"><h1>Staff Portal</h1><p>Sign in to manage the motorcycle shop.</p></div><form data-auth-form="login">${field("Email","email",state.account.email||"admin@motocare.ai","email",true)}${field("Password","password","","password",true)}<div class="auth-row"><label class="check"><input type="checkbox" name="remember" checked> Remember me</label><button type="button" class="link-btn" data-auth-view="forgot">Forgot password?</button></div><button class="btn primary auth-submit">Sign In</button></form><div class="demo-login"><strong>Prototype demo</strong><span>admin@motocare.ai</span><span>admin123</span></div><div class="auth-switch">Need a staff account? <button type="button" class="link-btn" data-auth-view="signup">Create one</button></div></div><div class="auth-footer">MotoCare AI · Owner / Staff Portal · Prototype</div><div class="toast" id="toast"></div></div>`;
+  }
+  function profileMenu(){return `<div class="profile-menu"><div class="profile-menu-head"><div class="avatar">${esc(initials(state.account.name))}</div><div><strong>${esc(state.account.name)}</strong><span>${esc(state.account.email)}</span></div></div><button type="button" data-action="account-settings">Profile & Account</button><button type="button" data-action="change-password">Change Password</button><div class="profile-divider"></div><button type="button" class="logout-btn" data-action="logout">Log Out</button></div>`}
+  function notificationPanel(){return `<div class="notification-panel"><div class="notification-head"><strong>Notifications</strong><button type="button" class="link-btn" data-action="mark-notifications">Mark all read</button></div>${state.notifications.map(n=>`<button type="button" class="notification-item ${n.read?'read':''}" data-action="read-notification" data-id="${n.id}"><span class="notification-icon">•</span><span><strong>${esc(n.title)}</strong><small>${esc(n.text)}</small><em>${esc(n.time)}</em></span></button>`).join("")}</div>`}
 
   function pageTitle(){
     const found = nav.find(x=>x[0]===state.page);
@@ -352,6 +361,7 @@
       `<div class="card panel"><div class="toolbar"><input class="input" placeholder="Filter report..."><select class="select"><option>All</option><option>This Month</option><option>Last Month</option></select></div><div class="table-wrap"><table class="table"><thead><tr>${c[2].map(x=>`<th>${x}</th>`).join("")}</tr></thead><tbody>${c[3].map(row=>`<tr>${row.map((x,i)=>`<td>${i===0?`<strong>${x}</strong>`:x}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`;
   }
 
+  function accountPage(){return pageHead("Profile & Account","Manage the staff account used to access MotoCare AI.",`<button class="btn primary" data-action="change-password">Change Password</button>`)+`<div class="detail-grid"><div class="card panel"><div class="panel-head"><h2>Account Information</h2></div><div class="account-profile"><div class="account-avatar">${esc(initials(state.account.name))}</div><div><strong>${esc(state.account.name)}</strong><span>${esc(state.account.role)}</span></div></div><div class="info-list account-info">${info("Full Name",esc(state.account.name))}${info("Email",esc(state.account.email))}${info("Role",esc(state.account.role))}${info("Account Status",badge("Active"))}</div><button class="btn" data-action="edit-account">Edit Profile</button></div><div class="card panel"><div class="panel-head"><h2>Security</h2></div><div class="list"><div class="list-row"><div><strong>Password</strong><div class="small-text muted">Keep your staff account secure.</div></div><button class="link-btn" data-action="change-password">Change</button></div><div class="list-row"><div><strong>Session</strong><div class="small-text muted">Current browser session is active.</div></div>${badge("Active")}</div></div></div></div>`}
   function modalMarkup(){
     const type=state.modal.type, edit=state.modal.edit||null;
     const title=edit?"Edit ":"Add ";
@@ -367,9 +377,11 @@
     if(type==="part") body=formPart();
     if(type==="assign") body=formAssign();
     if(type==="status") body=formStatus();
+    if(type==="account") body=formAccount();
+    if(type==="password") body=formPassword();
     return `<div class="modal ${["appointment","repair"].includes(type)?"large":""}" role="dialog" aria-modal="true"><div class="modal-head"><h2>${modalTitle(type,edit)}</h2><button class="close" type="button" data-action="close-modal">×</button></div><div class="modal-body">${body}</div></div>`;
   }
-  function modalTitle(type,edit){const map={customer:"Customer",motorcycle:"Motorcycle",appointment:"Appointment",repair:"Repair / Service",mechanic:"Mechanic",inventory:"Inventory Item",payment:"Payment",stock:"Add / Adjust Stock",part:"Add Part",assign:"Assign Mechanic",status:"Update Repair Status"};return (edit?"Edit ":"")+(map[type]||"Action");}
+  function modalTitle(type,edit){const map={customer:"Customer",motorcycle:"Motorcycle",appointment:"Appointment",repair:"Repair / Service",mechanic:"Mechanic",inventory:"Inventory Item",payment:"Payment",stock:"Add / Adjust Stock",part:"Add Part",assign:"Assign Mechanic",status:"Update Repair Status",account:"Edit Profile",password:"Change Password"};return (edit?"Edit ":"")+(map[type]||"Action");}
   function formCustomer(e,title){return `<form data-form="customer"><div class="form-grid">${field("Full Name","name",e?.name||"","text",true)}${field("Phone","phone",e?.phone||"","text",true)}${field("Email","email",e?.email||"","email",true)}${field("Address","address",e?.address||"","text",false)}<div class="field"><label>Status</label><select class="select" name="status"><option>Active</option><option ${e?.status==="Inactive"?"selected":""}>Inactive</option></select></div></div><div class="form-actions"><button class="btn" type="button" data-action="close-modal">Cancel</button><button class="btn primary">Save Customer</button></div></form>`}
   function formMotorcycle(e,title){return `<form data-form="motorcycle"><div class="form-grid">${field("Owner","owner",e?.owner||state.modal.owner||"","text",true)}${field("Brand","brand",e?.brand||"Honda","text",true)}${field("Model","model",e?.model||"","text",true)}${field("Year","year",e?.year||"2026","number",true)}${field("Plate Number","plate",e?.plate||"","text",true)}${field("Current Mileage","mileage",e?.mileage||"0 km","text",true)}${field("Chassis Number","chassis",e?.chassis||"","text",false)}${field("Engine Number","engine",e?.engine||"","text",false)}</div><div class="form-actions"><button class="btn" type="button" data-action="close-modal">Cancel</button><button class="btn primary">Save Motorcycle</button></div></form>`}
   function formAppointment(e){return `<form data-form="appointment"><div class="form-grid"><div class="field"><label>Customer</label><select class="select" name="customer">${data.customers.map(c=>`<option ${e?.customer===c.name?"selected":""}>${esc(c.name)}</option>`).join("")}</select></div>${field("Motorcycle","motorcycle",e?.motorcycle||"","text",true)}${field("Date","date",e?.date||"2026-09-26","date",true)}${field("Time","time",e?.time||"09:00","time",true)}${field("Requested Service","service",e?.service||"","text",true)}<div class="field"><label>Mechanic</label><select class="select" name="mechanic"><option>Unassigned</option>${data.mechanics.map(m=>`<option ${e?.mechanic===m.name?"selected":""}>${esc(m.name)}</option>`).join("")}</select></div><div class="field full"><label>Notes</label><textarea class="textarea" name="notes" rows="3">${esc(e?.notes||"")}</textarea></div></div><div class="form-actions"><button class="btn" type="button" data-action="close-modal">Cancel</button><button class="btn primary">Save Appointment</button></div></form>`}
@@ -381,8 +393,12 @@
   function formPart(){return `<form data-form="part"><div class="form-grid"><div class="field full"><label>Part</label><select class="select" name="part">${data.inventory.map(i=>`<option value="${i.name}">${esc(i.name)} — ${money(i.price)}</option>`).join("")}</select></div>${field("Quantity","quantity",1,"number",true)}</div><div class="form-actions"><button class="btn" type="button" data-action="close-modal">Cancel</button><button class="btn primary">Add Part</button></div></form>`}
   function formAssign(){return `<form data-form="assign"><div class="field"><label>Mechanic</label><select class="select" name="mechanic">${data.mechanics.map(m=>`<option>${esc(m.name)}</option>`).join("")}</select></div><div class="form-actions"><button class="btn" type="button" data-action="close-modal">Cancel</button><button class="btn primary">Assign</button></div></form>`}
   function formStatus(){return `<form data-form="status"><div class="field"><label>Repair Status</label><select class="select" name="status"><option>Received</option><option>Inspection</option><option>Ongoing</option><option>Completed</option></select></div><div class="form-actions"><button class="btn" type="button" data-action="close-modal">Cancel</button><button class="btn primary">Update Status</button></div></form>`}
+  function formAccount(){return `<form data-form="account"><div class="form-grid">${field("Full Name","name",state.account.name,"text",true)}${field("Email","email",state.account.email,"email",true)}<div class="field"><label>Role</label><input class="input" value="${esc(state.account.role)}" disabled></div></div><div class="form-actions"><button class="btn" type="button" data-action="close-modal">Cancel</button><button class="btn primary">Save Profile</button></div></form>`}
+  function formPassword(){return `<form data-form="password"><div class="form-grid">${field("Current Password","current","","password",true)}${field("New Password","password","","password",true)}${field("Confirm New Password","confirm","","password",true)}</div><div class="auth-note">Prototype only: this simulates password changes locally.</div><div class="form-actions"><button class="btn" type="button" data-action="close-modal">Cancel</button><button class="btn primary">Change Password</button></div></form>`}
   function field(label,name,value="",type="text",required=false){return `<div class="field"><label>${label}${required?" *":""}</label><input class="input" name="${name}" type="${type}" value="${esc(value)}" ${required?"required":""}></div>`}
 
+  function bindAuth(){app.querySelectorAll("[data-auth-view]").forEach(b=>b.addEventListener("click",()=>{state.authView=b.dataset.authView;render()}));app.querySelectorAll("form[data-auth-form]").forEach(f=>f.addEventListener("submit",e=>submitAuth(e,f.dataset.authForm)))}
+  function submitAuth(e,type){e.preventDefault();const f=e.currentTarget,v=Object.fromEntries(new FormData(f).entries());if(type==="login"){const email=String(v.email||"").trim().toLowerCase();const saved=JSON.parse(localStorage.getItem("motocare_staff_account")||"null");const validDemo=email==="admin@motocare.ai"&&v.password==="admin123";const validSaved=saved&&email===String(saved.email).toLowerCase()&&v.password===saved.password;if(!validDemo&&!validSaved){toast("Invalid email or password.");return}if(saved){state.account={name:saved.name,email:saved.email,role:saved.role};}state.authenticated=true;localStorage.setItem("motocare_staff_session","1");render();toast("Welcome back to MotoCare AI.")}else if(type==="signup"){if(v.password!==v.confirm){toast("Passwords do not match.");return}if(String(v.password||"").length<6){toast("Password must be at least 6 characters.");return}state.account={name:v.name,email:v.email,role:"Staff"};localStorage.setItem("motocare_staff_account",JSON.stringify({...state.account,password:v.password}));state.authenticated=true;localStorage.setItem("motocare_staff_session","1");render();toast("Staff account created.")}else if(type==="forgot"){state.authView="login";render();toast("Password reset link simulated.")}}
   function bind(){
     app.querySelectorAll("[data-nav]").forEach(b=>b.addEventListener("click",()=>navigate(b.dataset.nav)));
     app.querySelectorAll("[data-action]").forEach(el=>el.addEventListener("click",handleAction));
@@ -392,7 +408,7 @@
     const posSearch=app.querySelector("#posSearch"); if(posSearch)posSearch.addEventListener("input",()=>{const q=posSearch.value.toLowerCase();app.querySelector("#productGrid").innerHTML=data.products.filter(p=>p.name.toLowerCase().includes(q)).map(p=>`<button class="product" type="button" data-action="add-cart" data-id="${p.id}"><div class="product-name">${esc(p.name)}</div><div class="product-meta">${p.category}</div><div class="product-price">${money(p.price)}</div></button>`).join("");bind();});
   }
 
-  function navigate(page){state.page=page;state.search="";state.modal=null;state.report=null;state.selectedCustomer=null;state.selectedMotorcycle=null;state.selectedAppointment=null;state.selectedRepair=null;state.selectedMechanic=null;state.selectedItem=null;render();window.scrollTo(0,0)}
+  function navigate(page){state.page=page;state.search="";state.showProfileMenu=false;state.notificationsOpen=false;state.modal=null;state.report=null;state.selectedCustomer=null;state.selectedMotorcycle=null;state.selectedAppointment=null;state.selectedRepair=null;state.selectedMechanic=null;state.selectedItem=null;render();window.scrollTo(0,0)}
   function render(){
     let content="";
     if(state.page==="dashboard")content=dashboard();
@@ -411,6 +427,7 @@
     else if(state.page==="pos")content=pos();
     else if(state.page==="reports")content=reports();
     else if(state.page==="report-detail")content=reportPage();
+    else if(state.page==="account")content=accountPage();
     else content=dashboard();
     shell(content);
   }
@@ -419,7 +436,14 @@
     const a=e.currentTarget.dataset.action,id=e.currentTarget.dataset.id;
     if(a==="go")navigate(e.currentTarget.dataset.page);
     if(a==="menu")app.querySelector("#sidebar")?.classList.toggle("open");
-    if(a==="notification")toast("No new critical notifications.");
+    if(a==="notification"){state.notificationsOpen=!state.notificationsOpen;state.showProfileMenu=false;render()}
+    if(a==="profile-menu"){state.showProfileMenu=!state.showProfileMenu;state.notificationsOpen=false;render()}
+    if(a==="logout"){state.authenticated=false;state.authView="login";state.showProfileMenu=false;localStorage.removeItem("motocare_staff_session");render()}
+    if(a==="account-settings"){state.page="account";state.showProfileMenu=false;render()}
+    if(a==="change-password"){state.showProfileMenu=false;openModal("password")}
+    if(a==="edit-account"){openModal("account")}
+    if(a==="mark-notifications"){state.notifications.forEach(n=>n.read=true);render()}
+    if(a==="read-notification"){const n=state.notifications.find(x=>x.id===Number(id));if(n)n.read=true;render()}
     if(a==="customer-detail"){state.selectedCustomer=id;state.page="customer-detail";render()}
     if(a==="motorcycle-detail"){state.selectedMotorcycle=id;state.page="motorcycle-detail";render()}
     if(a==="appointment-detail"){state.selectedAppointment=id;openModal("appointment",{edit:data.appointments.find(x=>x.id===id)})}
@@ -484,6 +508,12 @@
       const r=data.repairs.find(x=>x.id===state.modal.repairId);if(r){r.mechanic=v.mechanic;closeModal();toast("Mechanic assigned.");}
     } else if(type==="status"){
       const r=data.repairs.find(x=>x.id===state.modal.repairId);if(r){r.status=v.status;closeModal();toast("Repair status updated.");}
+    } else if(type==="account"){
+      state.account.name=v.name;state.account.email=v.email;localStorage.setItem("motocare_staff_account",JSON.stringify(state.account));closeModal();toast("Profile updated.");
+    } else if(type==="password"){
+      if(v.password!==v.confirm){toast("New passwords do not match.");return}
+      if(String(v.password||"").length<6){toast("Password must be at least 6 characters.");return}
+      closeModal();toast("Password changed successfully.");
     }
   }
 
